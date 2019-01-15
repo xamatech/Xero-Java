@@ -1,15 +1,49 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>com.xero</groupId>
-	<artifactId>xero-java-sdk</artifactId>
+	<groupId>com.github.xeroapi</groupId>
+	<artifactId>xero-java</artifactId>
 	<packaging>jar</packaging>
-	<version>1.3.1</version>
+	<version>2.2.6</version>
 	<name>Xero-Java SDK</name>
-	<url>http://maven.apache.org</url>
+	<description>This is the official Java SDK for Xero API</description>
+	<url>https://github.com/XeroAPI/Xero-Java</url>
+	<licenses>
+		<license>
+			<name>MIT License</name>
+			<url>http://www.opensource.org/licenses/mit-license.php</url>
+		</license>
+	</licenses>
+	<distributionManagement>
+		<snapshotRepository>
+			<id>ossrh</id>
+			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
+		</snapshotRepository>
+		<repository>
+			<id>ossrh</id>
+			<url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+		</repository>
+	</distributionManagement>
+	<developers>
+		<developer>
+			<name>Sidney Maestre</name>
+			<email>api@xero.com</email>
+			<organization>Xero</organization>
+			<organizationUrl>https://developer.xero.com</organizationUrl>
+		</developer>
+	</developers>
+	<scm>
+		<connection>scm:git:git://github.com/XeroAPI/Xero-Java.git</connection>
+		<developerConnection>scm:git:ssh://github.com:XeroAPI/Xero-Java.git</developerConnection>
+		<url>http://github.com/XeroAPI/Xero-Java/tree/master</url>
+	</scm>
 	<dependencies>
-		<!-- HTTP client: google-api-client -->
-        <dependency>
+		<dependency>
+			<groupId>com.github.xeroapi</groupId>
+			<artifactId>xeroapi-schemas</artifactId>
+			<version>1.0.0</version>
+		</dependency>
+		<dependency>
             <groupId>com.google.api-client</groupId>
             <artifactId>google-api-client</artifactId>
             <version>${google-api-client-version}</version>
@@ -23,11 +57,6 @@
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
 			<version>2.5</version>
-		</dependency>
-		<dependency>
-			<groupId>com.xero</groupId>
-			<artifactId>xero-accounting-api-schema</artifactId>
-			<version>0.1.2</version>
 		</dependency>
 		<dependency>
 			<groupId>javax.servlet</groupId>
@@ -62,7 +91,12 @@
         <dependency>
 		    <groupId>org.apache.httpcomponents</groupId>
 		    <artifactId>httpclient</artifactId>
-		    <version>4.5.3</version>
+		    <version>${org-apache-httpcomponents}</version>
+		</dependency>
+		<dependency>
+		    <groupId>org.apache.httpcomponents</groupId>
+		    <artifactId>httpmime</artifactId>
+		    <version>${org-apache-httpcomponents}</version>
 		</dependency>
         <dependency>
 	       <groupId>org.apache.logging.log4j</groupId>
@@ -106,63 +140,12 @@
             <version>${jersey-common-version}</version>
         </dependency>
 	</dependencies>
-	<repositories>
-		<repository>
-			<id>xero-accounting-api-schema-mvn-repo</id>
-			<url>https://raw.github.com/XeroAPI/XeroAPI-Schemas/mvn-repo/</url>
-			<snapshots>
-				<enabled>true</enabled>
-				<updatePolicy>always</updatePolicy>
-			</snapshots>
-		</repository>
-	</repositories>
-	<distributionManagement>
-		<repository>
-			<id>internal.repo</id>
-			<name>Temporary Staging Repository</name>
-			<url>file://${project.build.directory}/mvn-repo</url>
-		</repository>
-	</distributionManagement>
 	<build>
 		<finalName>Xero-Java-SDK</finalName>
-		<plugins>
+		<plugins>	
 			<plugin>
 				<artifactId>maven3-deploy-plugin</artifactId>
 				<version>2.8.1</version>
-				<configuration>
-					<altDeploymentRepository>internal.repo::default::file://${project.build.directory}/mvn-repo</altDeploymentRepository>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>com.github.github</groupId>
-				<artifactId>site-maven-plugin</artifactId>
-				<version>0.12</version>
-				<configuration>
-					<!-- git commit message -->
-					<message>Maven artifacts for ${project.version}</message>
-					<!-- disable webpage processing -->
-					<noJekyll>true</noJekyll>
-					<!-- matches distribution management repository url above -->
-					<outputDirectory>${project.build.directory}/mvn-repo</outputDirectory>
-					<branch>refs/heads/mvn-repo</branch>
-					<!-- If you remove this then the old artifact will be removed and new 
-						one will replace. But with the merge tag you can just release by changing 
-						the version -->
-					<merge>true</merge>
-					<includes>
-						<include>**/*</include>
-					</includes>
-					<repositoryName>Xero-Java</repositoryName>
-					<repositoryOwner>XeroAPI</repositoryOwner>
-				</configuration>
-				<executions>
-					<execution>
-						<goals>
-							<goal>site</goal>
-						</goals>
-						<phase>deploy</phase>
-					</execution>
-				</executions>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -232,15 +215,63 @@
 					</webResources>
 				</configuration>
 			</plugin>
+			
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>2.2.1</version>
+				<executions>
+					<execution>
+						<id>attach-sources</id>
+						<goals>
+							<goal>jar-no-fork</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>2.9.1</version>
+				<executions>
+					<execution>
+						<id>attach-javadocs</id>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-gpg-plugin</artifactId>
+				<version>1.5</version>
+				<executions>
+					<execution>
+						<id>sign-artifacts</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>sign</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.sonatype.plugins</groupId>
+				<artifactId>nexus-staging-maven-plugin</artifactId>
+				<version>1.6.7</version>
+				<extensions>true</extensions>
+				<configuration>
+					<serverId>ossrh</serverId>
+					<nexusUrl>https://oss.sonatype.org/</nexusUrl>
+					<autoReleaseAfterClose>true</autoReleaseAfterClose>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 	<reporting>
 		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-project-info-reports-plugin</artifactId>
-				<version>2.9</version>
-			</plugin>
+			
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-pmd-plugin</artifactId>
@@ -271,8 +302,9 @@
 		<swagger-annotations-version>1.5.17</swagger-annotations-version>
 		<google-api-client-version>1.23.0</google-api-client-version>
 		<jersey-common-version>2.25.1</jersey-common-version>
-		<jackson-version>2.9.6</jackson-version>
+		<jackson-version>2.9.8</jackson-version>
 		<jackson-threetenbp-version>2.6.4</jackson-threetenbp-version>
         <junit-version>4.12</junit-version>
+        <org-apache-httpcomponents>4.5.3</org-apache-httpcomponents>
 	</properties>
 </project>

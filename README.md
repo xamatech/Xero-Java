@@ -1,6 +1,66 @@
 # Xero-Java
 
-This is the Java SDK for the Xero API. Currently, supports Accounting API. All third party libraries dependencies managed with Maven
+[![Maven Central](https://img.shields.io/maven-central/v/com.github.xeroapi/xero-java.svg?label=Maven%20Central)](https://search.maven.org/search?q=g:%22com.github.xeroapi%22%20AND%20a:%22xero-java%22)
+
+This is the official Java SDK for Xero's API. It supports accounting, fixed asset and bank feed API endpoints. All third party libraries dependencies managed with Maven.
+
+
+## Migrating from version 1.0 to 2.0 of SDK
+We've made some big changes to our Java SDK with version 2.0.  All code examples in this README are for version 2.0.  We've archived [code samples for version 1.0 here](https://github.com/XeroAPI/Xero-Java/tree/master/example).
+
+2.0 implements requests and responses for accounting API endpoints using JSON only.  Don't worry we won't be removing any of the existing methods for XML, but will mark them as deprecated in favor of JSON.
+
+Our XSD schema files will also be deprecated in favor of [OpenAPI spec 3.0 files now available on Github](https://github.com/XeroAPI/Xero-OpenAPI).
+
+Lastly, our trusty XeroClient class that holds methods for interacting with each endpoint will be deprecated in favor of clients for each major API group at Xero.  See below. 
+
+### Initializing Client
+
+1.0 Client (deprecated)
+```java
+XeroClient client = new XeroClient();
+client.setOAuthToken(accessToken.getToken(), accessToken.getTokenSecret());				
+```
+
+2.0 Client
+```java
+// Accounting API endpoints
+ApiClient apiClientForAccounting = new ApiClient(config.getApiUrl(),null,null,null);
+AccountingApi accountingApi = new AccountingApi(apiClientForAccounting);
+accountingApi.setOAuthToken(token, tokenSecret);
+
+// Fixed Assets API endpoints
+ApiClient apiClientForAssets = new ApiClient(config.getAssetsUrl(),null,null,null);
+AssetApi assetApi = new AssetApi(apiClientForAssets);
+assetApi.setOAuthToken(token, tokenSecret);
+
+// BankFeeds API endpoints (for approved Partners)
+ApiClient apiClientForBankFeeds = new ApiClient(config.getBankFeedsUrl(),null,null,null);
+BankFeedsApi bankFeedsApi = new BankFeedsApi(apiClientForBankFeeds);
+bankFeedsApi.setOAuthToken(token, tokenSecret);
+```
+
+### Making API calls will change as well.
+
+1.0 Example GET
+```java
+List<Organisation> organisations = client.getOrganisations();
+System.out.println("Org Name : " + organisations.get(0).getName());
+```
+
+2.0 Example GET
+```java
+Organisations organisations = accountingApi.getOrganisations();
+System.out.println("Org Name : " + organisations.getOrganisations().get(0).getName());
+```
+
+### Models are moving
+
+1.0 models where imported from com.xero.model.*
+
+2.0 models are separated into major API groups under *com.xero.models* 
+i.e. com.xero.models.accounting.*
+
 
 ## Getting Started
 
@@ -9,31 +69,14 @@ Start by deciding which type of Xero app you'll be building [Private](http://dev
 
 ### Add Xero-Java Dependency
 
-For those using maven, add the dependency and repository to your pom.xml
+Add the dependency to your pom.xml.  Gradle, sbt and other build tools can be found on [maven central](https://search.maven.org/search?q=g:com.github.xeroapi).
 
     <dependency>
-	  <groupId>com.xero</groupId>
-	  <artifactId>xero-java-sdk</artifactId>
-	  <version>1.3.1</version>
+      <groupId>com.github.xeroapi</groupId>
+      <artifactId>xero-java</artifactId>
+      <version>2.2.6</version>
 	</dependency>
 
-    <repositories>
-      <repository>
-        <id>xero-java-mvn-repo</id>
-	    <url>https://raw.github.com/XeroAPI/Xero-Java/mvn-repo/</url>
-	    <snapshots>
-	      <enabled>true</enabled>
-	      <updatePolicy>always</updatePolicy>
-	    </snapshots>
-      </repository>
-    </repositories>
-
-### Where are the jars?
-
-You can download the latest build as a jar file from the *mvn-repo* branch of this project.
-
-### Working with sbt?
-We have a build.sbt file defined in the root of this project.
 
 ### Default Configuration
 The SDK uses a config.json file to manage API keys along with other configuration values.  The SDK will look for a file *config.json* in a source folder called *resources*.
@@ -56,7 +99,7 @@ Above is the default configuration method.  You also have the option to [customi
 #### Config.json example
 You should get the minimum config.json from app.xero.com. 
 
-Here is an examples of the minimum config.json for different Xero App Types.
+Here are examples of the minimum config.json for different Xero App Types.
 
 **Public**
 ```javascript
@@ -109,9 +152,24 @@ Here is an examples of the minimum config.json for different Xero App Types.
 
 ### Custom Configuration
 
-You have the option to implement your own Config class and pass it as an argument to the OAuthRequestToken, OAuthAccessToken and XeroClient constructors. 
+You have the option to implement your own Config class and pass it as an argument to the OAuthRequestToken, OAuthAccessToken and Api Clients (AccountingApi, AssetsApi, etc). 
 
 An example of how you might implement Config can be found in the `/src/main/java/com/xero/example` folder named `CustomJsonConfig.java`.
+
+```java
+try {
+	config = new CustomJsonConfig();
+	System.out.println("Your user agent is: " + config.getUserAgent());			
+} catch(Exception e) {
+	System.out.println(e.getMessage());
+}
+
+ApiClient apiClientForAccounting = new ApiClient(config.getApiUrl(),null,null,null);
+
+AccountingApi accountingApi = new AccountingApi(config);
+accountingApi.setApiClient(apiClientForAccounting);
+accountingApi.setOAuthToken(token, tokenSecret);
+```
 
 ### Spring Framework based Configuration
 
@@ -120,6 +178,7 @@ An alternative method of configuring the Xero Java SDK can be found in the `exam
 This class reads the configuration from the spring `Environment` backed by the `application.properties`. This handy way of configuring the SDK
 allows spring profiles to control your production and development environments.
 
+This code should be updated and replace XeroClient with new Clients (AccountingApi, AssetsApi, etc)
 ```java
     @Bean
     public XeroClient xeroClient(Environment environment) {
@@ -142,7 +201,7 @@ xero.PrivateKeyPassword=
 
 ## Customize Request Signing
 
-You can provide your own signing mechanism by using the `public XeroClient(Config config, SignerFactory signerFactory)` constructor. Simply implement the `SignerFactory` interface with your implementation.
+You can provide your own signing mechanism by using the `public AccountingApi(Config config, SignerFactory signerFactory)` constructor. Simply implement the `SignerFactory` interface with your implementation.
 
 You can also provide a `RsaSignerFactory` using the `public RsaSignerFactory(InputStream privateKeyInputStream, String privateKeyPassword)` constructor to fetch keys from any InputStream.
 
@@ -162,9 +221,10 @@ mvn clean compile war:war
 
 Then deploy the Xero-Java-SDK.war found in the target directory to your Java server.
 
+
 ### Step by Step Video
 We've created a video walking through how to create a new Eclipse project, add your dependencies and make your first API call.
-[Watch this video](https://youtu.be/V9SJ8zK0x6I). 
+[Watch this video](https://youtu.be/F3upynnpztc). 
 
 ### Hello Organization
 
@@ -232,9 +292,10 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.xero.api.ApiClient;
 import com.xero.api.OAuthAccessToken;
-import com.xero.api.XeroClient;
-import com.xero.model.Organisation;
+import com.xero.api.client.AccountingApi;
+import com.xero.models.accounting.Organisations;
 import com.xero.api.Config;
 import com.xero.api.JsonConfig;
 
@@ -250,7 +311,7 @@ public class CallbackServlet extends HttpServlet
 
 	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException 
 	{	
-			TokenStorage storage = new TokenStorage();
+		TokenStorage storage = new TokenStorage();
 		String verifier = request.getParameter("oauth_verifier");
 
 		try {
@@ -266,11 +327,13 @@ public class CallbackServlet extends HttpServlet
 			} else {
 				storage.save(response,accessToken.getAll());			
 				
-				XeroClient client = new XeroClient();
-				client.setOAuthToken(accessToken.getToken(), accessToken.getTokenSecret());
+				ApiClient apiClientForAccounting = new ApiClient(config.getApiUrl(),null,null,null);
+				AccountingApi accountingApi = new AccountingApi(apiClientForAccounting);
+				accountingApi.setOAuthToken(accessToken.getToken(), accessToken.getTokenSecret());
+		
+				Organisations organisations = accountingApi.getOrganisations();
+				System.out.println("Get a Organisation - Name : " + organisations.getOrganisations().get(0).getName());
 				
-				List<Organisation> newOrganisation = client.getOrganisations();
-				System.out.println("Get a Organisation - Name : " + newOrganisation.get(0).getName());		
 			}
 		} catch(Exception e) {
 			System.out.println(e.getMessage());
@@ -358,11 +421,13 @@ public class TokenStorage
 
 **Data Endpoints**
 
-The Xero Java SDK contains XeroClient which has helper methods to perform (Create, Read, Update and Delete) actions on each endpoints.  Once you instantiate XeroClient, you'll use Xero API schema classes to interact with Java Objects.
+The Xero Java SDK contains Client classes (AccountingApi, AssetsApi, etc) which have helper methods to perform (Create, Read, Update and Delete) actions on each endpoints.  Once you instantiate a Client class, you'll use Xero API models to interact with Java Objects.
 
 ```java
 import com.xero.api.*;
-import com.xero.model.*;
+import com.xero.api.ApiClient;
+import com.xero.api.client.AccountingApi;
+import com.xero.models.accounting.*;
 
 // Get Xero API Resource - DEMONSTRATION ONLY get token from Cookie
 TokenStorage storage = new TokenStorage();
@@ -371,45 +436,47 @@ String tokenSecret = storage.get(request,"tokenSecret");
 
 // For Private Apps the token is your consumerKey and the tokenSecret is your consumerSecret
 // You can get these values out of the config object above
-XeroClient client = new XeroClient();
-client.setOAuthToken(token, tokenSecret);
-
+ApiClient apiClientForAccounting = new ApiClient(config.getApiUrl(),null,null,null);
+AccountingApi accountingApi = new AccountingApi(apiClientForAccounting);
+accountingApi.setOAuthToken(token, tokenSecret);
+		
 // Get All Contacts
-List<Contact> contactList = client.getContacts();
-System.out.println("How many contacts did we find: " + contactList.size());
+Contacts contactList = accountingApi.getContacts(null, null, null, null, null, null);
+System.out.println("How many contacts did we find: " + contactList.getContacts().size());
 				
 /* CREATE ACCOUNT */
-ArrayOfAccount accountArray = new ArrayOfAccount();
-Account account = new Account();
-account.setCode("66000");
-account.setName("Office Expense");
-account.setType(AccountType.EXPENSE);
-accountArray.getAccount().add(account);
-List<Account> newAccount = client.createAccounts(accountArray);
+Account newAccount = new Account();
+newAccount.setName("Office Expense");
+newAccount.setCode("66000"));
+newAccount.setType(Account.TypeEnum.EXPENSE);
+Accounts newAccount = accountingApi.createAccount(newAccount);
+messages.add("Create a new Account - Name : " + newAccount.getAccounts().get(0).getName());
 			
 /* READ ACCOUNT using a WHERE clause */
-List<Account> accountWhere = client.getAccounts(null,"Type==\"BANK\"",null);
+where = "Status==\"ACTIVE\"&&Type==\"BANK\"";
+Accounts accountsWhere = accountingApi.getAccounts(null, where, null);
 
 /* READ ACCOUNT using the ID */
-List<Account> accountList = client.getAccounts();
-Account accountOne = client.getAccount(accountList.get(0).getAccountID());
-			
+Accounts accountList = accountingApi.getAccounts(null, null, null);
+UUID accountID = accountList.getAccounts().get(0).getAccountID();
+Accounts oneAccount = accountingApi.getAccount(accountID);
+							
 /* UPDATE ACCOUNT */
-newAccount.get(0).setName("Entertainment");
-newAccount.get(0).setStatus(null);
-List<Account> updateAccount = client.updateAccount(newAccount);
+UUID newAccountID = newAccount.getAccounts().get(0).getAccountID();
+newAccount.getAccounts().get(0).setDescription("Monsters Inc.");
+newAccount.getAccounts().get(0).setStatus(null);
+Accounts updateAccount = accountingApi.updateAccount(newAccountID, newAccount);
 
 /* DELETE ACCOUNT */
-String status = client.deleteAccount(newAccount.get(0).getAccountID());
+UUID deleteAccountID = newAccount.getAccounts().get(0).getAccountID();
+Accounts deleteAccount = accountingApi.deleteAccount(deleteAccountID);
+String status = deleteAccount.getAccounts().get(0).getStatus();
 
 // GET INVOICE MODIFIED in LAST 24 HOURS
-Date date = new Date();
-Calendar cal = Calendar.getInstance();
-cal.setTime(date);
-cal.add(Calendar.DAY_OF_MONTH, -1);
-		    
-List<Invoice> InvoiceList24hour = client.getInvoices(cal.getTime(),null,null);
-System.out.println("How many invoices modified in last 24 hours?: " + InvoiceList24hour.size());
+OffsetDateTime invModified = OffsetDateTime.now();
+invModified.minusDays(1);	
+Invoices InvoiceList24hour = accountingApi.getInvoices(invModified, null, null, null, null, null, null, null, null, null);
+System.out.println("How many invoices modified in last 24 hours?: " + InvoiceList24hour.getInvoices().size());
 ```
 
 **BankFeed Endpoints**
@@ -521,73 +588,29 @@ try {
 	System.out.println(statementErrors.getItems().get(0).getErrors().get(0).getDetail());
 }
 
-
-
-
 ```
-
-
 
 **Exception Handling**
 
 Below is an example of how how to handle errors.
 
-```java
-import com.xero.api.*;
-import com.xero.model.*;
-
-// FORCE a 404 Error - there is no contact wtih ID 1234	
-try {
-	Contact ContactOne = client.getContact("1234");
-	System.out.println("Get a single Contact - ID : " + ContactOne.getContactID());
-} catch (XeroApiException e) {
-	System.out.println(e.getResponseCode());
-	System.out.println(e.getMessage());	
-}	
-
-
-// FORCE a 503 Error - try to make more than 60 API calls in a minute to trigger rate limit error.
-List<Contact> ContactList = client.getContacts();
-int num = SampleData.findRandomNum(ContactList.size());			
-try {
-	for(int i=65; i>1; i--){
-		Contact ContactOne = client.getContact(ContactList.get(num).getContactID());
-	}
-	System.out.println("Congrats - you made over 60 calls without hitting rate limit");
-} catch (XeroApiException e) {
-	System.out.println(e.getResponseCode());
-	System.out.println(e.getMessage());  
-}		
-
-```
-
-Version 0.6.2 adds improved ApiException handling if you are creating multiple Invoices and pass the SummarizeError=true parameter - Thanks Lance Reid (lancedfr)
-
 
 ```java
 import com.xero.api.*;
-import com.xero.model.*;
+import com.xero.api.ApiClient;
+import com.xero.api.client.AccountingApi;
+import com.xero.models.accounting.*;
 
 try {
-	List<Invoice> listOfInvoices = new ArrayList<Invoice>();
-	listOfInvoices.add(SampleData.loadBadInvoice().getInvoice().get(0));
-	listOfInvoices.add(SampleData.loadBadInvoice2().getInvoice().get(0));
-	
-	List<Invoice> newInvoice = client.createInvoices(listOfInvoices,null,true);
-	System.out.println("Create a new Invoice ID : " + newInvoice.get(0).getInvoiceID() + " - Reference : " +newInvoice.get(0).getReference());
+	// BAD invoice data
 		
 } catch (XeroApiException e) {
-	System.out.println(e.getResponseCode());
-
-	List<Elements> elements = e.getApiException().getElements();
-	Elements element = elements.get(0);
- 	List<Object> dataContractBase = element.getDataContractBase();
-	for (Object dataContract : dataContractBase) {
-		Invoice failedInvoice = (Invoice) dataContract;
-		ArrayOfValidationError validationErrors = failedInvoice.getValidationErrors();
-            
-		System.out.println("Failure message : " + errors.get(0).getMessage());
-		System.out.println("Failure invoice Num : " + failedInvoice.getInvoiceNumber());
+	System.out.println("Response Code: " + e.getResponseCode());
+	System.out.println("Error Type: " + e.getError().getType());
+	System.out.println("Error Number: " + e.getError().getErrorNumber());
+	System.out.println("Error Message: " + e.getError().getMessage());
+	if (e.getResponseCode() == 400) {
+		System.out.println("Validation Message: " + e.getError().getElements().get(0).getValidationErrors().get(0).getMessage());
 	}
 }
 

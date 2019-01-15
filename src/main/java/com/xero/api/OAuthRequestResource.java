@@ -16,21 +16,27 @@ package com.xero.api;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpHost;
+
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpDelete;
@@ -38,17 +44,26 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.bp.OffsetDateTime;
+import org.threeten.bp.format.DateTimeFormatter;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.auth.oauth.OAuthSigner;
 import com.google.api.client.http.GenericUrl;
+import com.google.api.client.http.HttpResponse;
 import com.xero.api.exception.XeroExceptionHandler;
 import com.xero.models.bankfeeds.Statements;
 
@@ -107,6 +122,13 @@ public class OAuthRequestResource {
 		this.contentType = contentType;
 		this.requestBody = bytes;
 	}
+	
+	public  OAuthRequestResource(Config config, SignerFactory signerFactory, String resource, String method, String contentType, byte[] bytes, Map<? extends String, ?> params, String accept) {
+		this(config, signerFactory, resource, method, params);
+		this.contentType = contentType;
+		this.requestBody = bytes;
+		this.accept = accept;
+	}
 
 	public OAuthRequestResource(Config config, SignerFactory signerFactory, String resource, String method, String contentType, File file, Map<? extends String, ?> params) {
 		this(config, signerFactory, resource, method, params);
@@ -115,7 +137,7 @@ public class OAuthRequestResource {
 	
 	public final ByteArrayInputStream executefile() throws UnsupportedOperationException, IOException {
 		CloseableHttpClient httpclient =null;
-		httpclient = new XeroHttpContext(config,this.accept,this.contentType,this.ifModifiedSince).getHttpClient();
+		httpclient = new XeroHttpContext(config,this.accept,this.ifModifiedSince).getHttpClient();
 
 		if(this.resource.indexOf("https") ==-1) {
 			this.resource = config.getApiUrl() + this.resource;
@@ -125,22 +147,41 @@ public class OAuthRequestResource {
 		if (this.params != null) {
 			url.putAll(this.params);
 		}
+		
+		RequestConfig.Builder requestConfig = RequestConfig.custom()
+				.setConnectTimeout(connectTimeout)
+				.setConnectionRequestTimeout(readTimeout)
+				.setSocketTimeout(connectTimeout);
+		
+		//Proxy Service Setup - unable to fully test as we don't have a proxy 
+		// server to test against.
+		if(!"".equals(config.getProxyHost()) && config.getProxyHost() != null) {
+			int port = (int) (config.getProxyPort() == 80 && config.getProxyHttpsEnabled() ? 443 : config.getProxyPort());		
+			HttpHost proxy = new HttpHost(config.getProxyHost(), port, config.getProxyHttpsEnabled() ? "https" : "http");
+			requestConfig.setProxy(proxy);
+		}
 
 		HttpGet httpget = new HttpGet(url.toString());
 		if (httpMethod == "GET") {
 			this.createParameters().intercept(httpget,url);
+			httpget.setConfig(requestConfig.build());
 		}
 		
 		HttpPost httppost = new HttpPost(url.toString());
 		if (httpMethod == "POST") {
 			httppost.setEntity(new StringEntity(this.body, "utf-8"));
+			httppost.addHeader("Content-Type", this.contentType);
 		    this.createParameters().intercept(httppost,url);
+		    httppost.setConfig(requestConfig.build());
 		}
 		
 		HttpPut httpput = new HttpPut(url.toString());
 		if (httpMethod == "PUT") {
 			httpput.setEntity(new StringEntity(this.body, "utf-8"));
+			httpput.addHeader("Content-Type", this.contentType);
+
 		    this.createParameters().intercept(httpput,url);
+		    httpput.setConfig(requestConfig.build());
 		}
 		
 		HttpEntity entity;
@@ -203,11 +244,13 @@ public class OAuthRequestResource {
 	public final Map<String, String> execute() throws IOException,XeroApiException  {
 		CloseableHttpClient httpclient =null;
 		
-		httpclient = new XeroHttpContext(config,this.accept,this.contentType,this.ifModifiedSince).getHttpClient();
+		httpclient = new XeroHttpContext(config,this.accept,this.ifModifiedSince).getHttpClient();
 		
 		if(this.resource.indexOf("https") ==-1) {
 			this.resource = config.getApiUrl() + this.resource;
 		}
+		
+		//params.forEach((k,v)->System.out.println("Key : " + k + " Value : " + v));
 		
 		url = new GenericUrl(this.resource);
 		if (this.params != null) {
@@ -241,11 +284,15 @@ public class OAuthRequestResource {
 		if (httpMethod == "POST") {
 			if(logger.isInfoEnabled()){
 				logger.info("------------------ POST: BODY  -------------------");
-				logger.info(this.body);
-				
+				logger.info(this.body);	
 			}
-		
-			httppost.setEntity(new StringEntity(this.body, "utf-8"));
+			if(this.requestBody != null) {
+				httppost.setEntity(new ByteArrayEntity(this.requestBody));				
+			} else {
+				httppost.setEntity(new StringEntity(this.body, "utf-8"));
+			}
+			
+			httppost.addHeader("Content-Type", this.contentType);
 		    this.createParameters().intercept(httppost,url);
 		  	httppost.setConfig(requestConfig.build());
 		}
@@ -261,8 +308,8 @@ public class OAuthRequestResource {
 			} else {
 				httpput.setEntity(new StringEntity(this.body, "utf-8"));
 			}
-			
-		    this.createParameters().intercept(httpput,url);
+			httpput.addHeader("Content-Type", this.contentType);
+			this.createParameters().intercept(httpput,url);
 		    httpput.setConfig(requestConfig.build());
 		}
 		
@@ -306,7 +353,11 @@ public class OAuthRequestResource {
 		        int code = response.getStatusLine().getStatusCode();
 		        
 		        if (code == 204) {
-					content = "<Response><Status>DELETED</Status></Response>";
+		        	if (this.contentType == "application/json") {
+						content = "{\"Status\": \"DELETED\" }";
+		        	} else {
+						content = "<Response><Status>DELETED</Status></Response>";		        		
+		        	}
 		        }
 		        if (code != 200 && code != 201 && code != 202 && code != 204) {
 		            Header rateHeader = response.getFirstHeader("x-rate-limit-problem");
@@ -314,7 +365,7 @@ public class OAuthRequestResource {
 		                content += "&rate=" + rateHeader.getValue().toLowerCase();
                     }
 		            
-					XeroApiException e = new XeroApiException(code,content);
+		          	XeroApiException e = new XeroApiException(code,content);
 		        		throw e;
 		        }
 		        
@@ -353,6 +404,10 @@ public class OAuthRequestResource {
 	}
 	public void setTokenSecret(String secret) {
 		this.tokenSecret = secret; 
+	}
+	
+	public void setIfModifiedSince(OffsetDateTime modifiedAfter) {
+		this.ifModifiedSince = modifiedAfter.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
 	}
 	
 	public void setIfModifiedSince(Date modifiedAfter) {

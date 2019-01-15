@@ -702,17 +702,6 @@ public class XeroClient {
         return put("CreditNote", objFactory.createCreditNotes(array),params).getCreditNotes().getCreditNote();
     }
 
-
-    public List<CreditNote> createCreditNotes(List<CreditNote> objects, String unitdp, Boolean summarizeErrors) throws IOException {
-        Map<String, String> params = new HashMap<>();
-        addToMapIfNotNull(params, "unitdp", unitdp);
-        addToMapIfNotNull(params, "SummarizeErrors", summarizeErrors);
-
-        ArrayOfCreditNote array = new ArrayOfCreditNote();
-        array.getCreditNote().addAll(objects);
-        return put("CreditNote", objFactory.createCreditNotes(array), params).getCreditNotes().getCreditNote();
-    }
-
     public List<CreditNote> updateCreditNote(List<CreditNote> objects) throws IOException {
         ArrayOfCreditNote array = new ArrayOfCreditNote();
         array.getCreditNote().addAll(objects);
@@ -731,6 +720,15 @@ public class XeroClient {
     public ByteArrayInputStream getCreditNotePdfContent(String id) throws IOException {
         return getInputStream("CreditNotes/" + id, null, null, "application/pdf");
     }
+    
+    public List<Allocation> createCreditNoteAllocations(List<Allocation> objects, String id) throws IOException {
+        ArrayOfAllocation array = new ArrayOfAllocation();
+        array.getAllocation().addAll(objects);
+        return put("CreditNotes/" + id + "/Allocations", objFactory.createAllocations(array))
+            .getAllocations()
+            .getAllocation();
+    }
+
 
     //CURRENCY
     public List<Currency> getCurrencies() throws IOException {
@@ -930,7 +928,7 @@ public class XeroClient {
         return put("Invoices", objFactory.createInvoices(array), params).getInvoices().getInvoice();
     }
     
-    public List<Invoice> createInvoices(List<Invoice> invoices, String unitdp, Boolean summarizeErrors) throws IOException {
+    public List<Invoice> createInvoices(List<Invoice> invoices, String unitdp,Boolean summarizeErrors) throws IOException {
         Map<String, String> params = new HashMap<>();
         addToMapIfNotNull(params, "unitdp", unitdp);
         addToMapIfNotNull(params, "SummarizeErrors", summarizeErrors);
@@ -1905,7 +1903,7 @@ public class XeroClient {
     /**
      * Normalizes file name with respect to https://tools.ietf.org/html/rfc3986#section-2.3
      *
-     * @param fileName
+     * @param fileName the name of the file you are posting or putting to the API
      * @return file name which does not contain invalid URI characters
      */
     protected String normalizeFileNameForURI(final String fileName) {

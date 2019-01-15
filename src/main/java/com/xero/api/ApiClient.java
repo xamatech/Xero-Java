@@ -1,5 +1,6 @@
 package com.xero.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -15,7 +16,6 @@ import com.google.api.client.json.Json;
 import java.io.IOException;
 import java.io.OutputStream;
 
-
 public class ApiClient {
     private final String basePath;
     private final HttpRequestFactory httpRequestFactory;
@@ -25,10 +25,13 @@ public class ApiClient {
 
     // A reasonable default object mapper. Client can pass in a chosen ObjectMapper anyway, this is just for reasonable defaults.
     private static ObjectMapper createDefaultObjectMapper() {
-        ObjectMapper objectMapper = new ObjectMapper()
-            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-            .setDateFormat(new RFC3339DateFormat());
+    	ObjectMapper objectMapper = new ObjectMapper()
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .setDateFormat(new RFC3339DateFormat())
+                .setSerializationInclusion(Include.NON_NULL);
+    	objectMapper.configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL, true);
+
         ThreeTenModule module = new ThreeTenModule();
         module.addDeserializer(Instant.class, CustomInstantDeserializer.INSTANT);
         module.addDeserializer(OffsetDateTime.class, CustomInstantDeserializer.OFFSET_DATE_TIME);

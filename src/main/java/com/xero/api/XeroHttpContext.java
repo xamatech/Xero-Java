@@ -27,7 +27,6 @@ import org.apache.logging.log4j.Logger;
 public class XeroHttpContext {
 	private Config config;
 	private String accept;
-	private String contentType;
 	private String ifModifiedSince = null;
 	final static Logger logger = LogManager.getLogger(XeroHttpContext.class);
 	
@@ -36,11 +35,10 @@ public class XeroHttpContext {
 		this.config = config;
 	}
 	
-	public XeroHttpContext(Config config,String accept,String contentType, String ifModifiedSince)
+	public XeroHttpContext(Config config,String accept, String ifModifiedSince)
 	{
 		this.config = config;
 		this.accept = accept;
-		this.contentType = contentType;
 		this.ifModifiedSince = ifModifiedSince;
 	}
 	
@@ -48,12 +46,10 @@ public class XeroHttpContext {
 	{
 		CloseableHttpClient httpclient = null;
 		
-		Header contentHeader = new BasicHeader( HttpHeaders.CONTENT_TYPE, this.contentType == null ? "application/xml" : this.contentType);
-	    Header acceptHeader = new BasicHeader( HttpHeaders.ACCEPT, this.accept != null ? this.accept : config.getAccept());
+		Header acceptHeader = new BasicHeader( HttpHeaders.ACCEPT, this.accept != null ? this.accept : config.getAccept());
 	    Header userAgentHeader = new BasicHeader( HttpHeaders.USER_AGENT,  config.getUserAgent());
-	    
-		List<Header> headers = new ArrayList<Header>();
-		headers.add(contentHeader);
+		    
+	    List<Header> headers = new ArrayList<Header>();
 		headers.add(acceptHeader);
 		headers.add(userAgentHeader);
 		
@@ -61,7 +57,6 @@ public class XeroHttpContext {
 			Header modifiedHeader = new BasicHeader( HttpHeaders.IF_MODIFIED_SINCE, this.ifModifiedSince);
 			headers.add(modifiedHeader);
 		}
-		
 		
 		if ((config.getKeyStorePath() == null || config.getKeyStorePath().length() == 0) && (config.getKeyStorePassword() == null || config.getKeyStorePassword().length() == 0))
 		{
@@ -76,45 +71,29 @@ public class XeroHttpContext {
 			}
 			   
 			KeyStore keyStore = null;
-			try {
+			try(FileInputStream in = new FileInputStream(config.getKeyStorePath())) {
 				keyStore = KeyStore.getInstance("JKS");
-			} catch (KeyStoreException e) {
-				logger.error(e);
-			}
-				
-			try {
-				keyStore.load(new FileInputStream(config.getKeyStorePath()), 
-						config.getKeyStorePassword().toCharArray());
-			} catch (NoSuchAlgorithmException | CertificateException e1) {
+				keyStore.load(in, config.getKeyStorePassword().toCharArray());
+			} catch (KeyStoreException | NoSuchAlgorithmException | CertificateException e1) {
 				logger.error(e1);
 			}
+
 		 	TrustManagerFactory tmf = null;
 			try {
-				tmf = TrustManagerFactory.getInstance(
-				    TrustManagerFactory.getDefaultAlgorithm());
-			} catch (NoSuchAlgorithmException e) {
+				tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+				tmf.init(keyStore);
+			} catch (NoSuchAlgorithmException | KeyStoreException e) {
 				logger.error(e);
 			}
 		
-		    try {
-			tmf.init(keyStore);
-			
-			} catch (KeyStoreException e) {
-				logger.error(e);
-			}
-			    SSLContext ctx = null;
+			SSLContext ctx = null;
 			try {
 				ctx = SSLContext.getInstance("TLS");
-			} catch (NoSuchAlgorithmException e) {
+				ctx.init(null, tmf.getTrustManagers(), new SecureRandom());
+			} catch (NoSuchAlgorithmException | KeyManagementException e) {
 				logger.error(e);
 			}
 		
-			try {
-				ctx.init(null, tmf.getTrustManagers(), new SecureRandom());
-			} catch (KeyManagementException e) {
-				logger.error(e);
-			}
-			    
 		    SSLContext.setDefault(ctx);
 		      
 		    SSLConnectionSocketFactory sslsf = new SSLConnectionSocketFactory(

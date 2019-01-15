@@ -13,9 +13,13 @@ import com.xero.api.exception.XeroExceptionHandler;
 import com.xero.model.*;
 import com.xero.api.*;
 
+import org.threeten.bp.LocalDate;
+import org.threeten.bp.OffsetDateTime;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -46,11 +50,7 @@ public class AssetApi {
     protected static final Pattern MESSAGE_PATTERN = Pattern.compile("<Message>(.*)</Message>");
     protected final ObjectFactory objFactory = new ObjectFactory();
 
-    public AssetApi() {
-        this(JsonConfig.getInstance());
-        this.xeroExceptionHandler = new XeroExceptionHandler();
-    }
-
+    
     public AssetApi(Config config) {
         this(config, new ConfigBasedSignerFactory(config));
         this.xeroExceptionHandler = new XeroExceptionHandler();
@@ -81,21 +81,38 @@ public class AssetApi {
         this.tokenSecret = tokenSecret;
     }
 
-    protected String POST(String url, String body, Map<String, String> params, Date modifiedAfter) throws IOException {
+    
+    protected String DATA(String url, String body, Map<String, String> params, String method) throws IOException {
+        return this.DATA(url,body,params,method,null, "application/json");
+    }
+
+    protected String DATA(String url, String body, Map<String, String> params, String method, OffsetDateTime ifModifiedSince) throws IOException {
+        return this.DATA(url,body,params,method,ifModifiedSince,"application/json");
+    }
+
+    protected String DATA(String url, String body, Map<String, String> params, String method, String contentType) throws IOException {
+        return this.DATA(url,body,params,method,null,contentType);
+    }
+
+    protected String DATA(String url, String body, Map<String, String> params, String method, OffsetDateTime ifModifiedSince, String contentType) throws IOException {
         
         OAuthRequestResource req = new OAuthRequestResource(
             config, 
             signerFactory, 
             url, 
-            "POST", 
+            method, 
             body, 
             params,
-            "application/json",
+            contentType,
             "application/json");
         
         req.setToken(token);
         req.setTokenSecret(tokenSecret);
-       
+        
+        if (ifModifiedSince != null) {
+            req.setIfModifiedSince(ifModifiedSince);
+        }
+
         try {
             Map<String, String>  resp = req.execute();
             Object r = resp.get("content");
@@ -105,21 +122,25 @@ public class AssetApi {
         }
     }
 
-    protected String PUT(String url, String body, Map<String, String> params, Date modifiedAfter) throws IOException {
+    protected String DATA(String url, String body, Map<String, String> params, String method, String xeroApplicationId, String xeroTenantId, String xeroUserId) throws IOException {
         
         OAuthRequestResource req = new OAuthRequestResource(
             config, 
             signerFactory, 
             url, 
-            "PUT", 
+            method, 
             body, 
             params,
-            "application/json",
+            null,
             "application/json");
         
         req.setToken(token);
         req.setTokenSecret(tokenSecret);
-       
+        
+        //if (ifModifiedSince != null) {
+        //    req.setIfModifiedSince(ifModifiedSince);
+        //}
+
         try {
             Map<String, String>  resp = req.execute();
             Object r = resp.get("content");
@@ -129,49 +150,53 @@ public class AssetApi {
         }
     }
 
-    protected String DELETE(String url, String body, Map<String, String> params, Date modifiedAfter) throws IOException {
+   
+    protected ByteArrayInputStream FILE(String url, String body, Map<String, String> params, String method) throws IOException {
+       return this.FILE(url,body,params,method,"application/octet-stream");
+    }
+
+    protected ByteArrayInputStream FILE(String url, String body, Map<String, String> params, String method, String accept) throws IOException {
         
         OAuthRequestResource req = new OAuthRequestResource(
             config, 
             signerFactory, 
             url, 
-            "DELETE", 
+            method, 
             body, 
             params,
-            "application/json",
+            accept,
             "application/json");
         
         req.setToken(token);
         req.setTokenSecret(tokenSecret);
-       
+        
         try {
-            Map<String, String>  resp = req.execute();
-            Object r = resp.get("content");
-            return r.toString();
+            ByteArrayInputStream resp = req.executefile();
+            return resp;
         } catch (IOException ioe) {
              throw xeroExceptionHandler.convertException(ioe);
         }
     }
 
-    protected String GET(String url, String body, Map<String, String> params, Date modifiedAfter) throws IOException {
+    protected String FILE(String url, String body, Map<String, String> params, String method, byte[] byteBody) throws IOException {
+        return this.FILE(url,body,params,method,byteBody,"application/octet-stream");
+    }
+    
+    protected String FILE(String url, String body, Map<String, String> params, String method, byte[] byteBody, String contentType) throws IOException {
         
         OAuthRequestResource req = new OAuthRequestResource(
             config, 
             signerFactory, 
             url, 
-            "GET", 
-            null, 
+            method,
+            contentType,
+            byteBody, 
             params,
-            "application/json",
             "application/json");
         
         req.setToken(token);
         req.setTokenSecret(tokenSecret);
-        
-        if (modifiedAfter != null) {
-            req.setIfModifiedSince(modifiedAfter);
-        }
-
+       
         try {
             Map<String, String>  resp = req.execute();
             Object r = resp.get("content");
@@ -184,60 +209,62 @@ public class AssetApi {
   /**
     * adds a fixed asset
     * Adds an asset to the system
-    * <p><b>200</b> - search results matching criteria
+    * <p><b>200</b> - return single object - create new asset
     * <p><b>400</b> - invalid input, object invalid
     * @param asset Fixed asset to add
     * @return Asset
     * @throws IOException if an error occurs while attempting to invoke the API
     **/
-    public Asset createAsset(Asset asset, Map<String, String> params) throws IOException {
-        
+    public Asset createAsset(Asset asset) throws IOException {
         try {
-            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + "/Assets");
+            String strBody = null;
+            Map<String, String> params = null;
+            String correctPath = "/Assets";
+            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + correctPath);
             String url = uriBuilder.build().toString();
 
-            String body = null;
-            Date modifiedAfter = null;
+            
+            strBody = apiClient.getObjectMapper().writeValueAsString(asset);
 
-            ApiClient apiClient = new ApiClient();
-            body = apiClient.getObjectMapper().writeValueAsString(asset);
-            String response = this.POST(url, body, params, modifiedAfter);
-
+            String response = this.DATA(url, strBody, params, "POST");
             TypeReference<Asset> typeRef = new TypeReference<Asset>() {};
             return apiClient.getObjectMapper().readValue(response, typeRef);
-    
+
         } catch (IOException e) {
-            throw xeroExceptionHandler.convertException(e);
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage());
+        } catch (XeroApiException e) {
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage(), e.getResponseCode(),JSONUtils.isJSONValid(e.getMessage()));
         }
     }
   /**
     * adds a fixed asset type
     * Adds an fixed asset type to the system
-    * <p><b>200</b> - search results matching criteria
+    * <p><b>200</b> - results single object -  created fixed type
     * <p><b>400</b> - invalid input, object invalid
-    * <p><b>409</b> - an existing type already exists
+    * <p><b>409</b> - a type already exists
     * @param assetType Asset type to add
     * @return AssetType
     * @throws IOException if an error occurs while attempting to invoke the API
     **/
-    public AssetType createAssetType(AssetType assetType, Map<String, String> params) throws IOException {
-        
+    public AssetType createAssetType(AssetType assetType) throws IOException {
         try {
-            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + "/AssetTypes");
+            String strBody = null;
+            Map<String, String> params = null;
+            String correctPath = "/AssetTypes";
+            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + correctPath);
             String url = uriBuilder.build().toString();
 
-            String body = null;
-            Date modifiedAfter = null;
+            
+            strBody = apiClient.getObjectMapper().writeValueAsString(assetType);
 
-            ApiClient apiClient = new ApiClient();
-            body = apiClient.getObjectMapper().writeValueAsString(assetType);
-            String response = this.POST(url, body, params, modifiedAfter);
-
+            String response = this.DATA(url, strBody, params, "POST");
             TypeReference<AssetType> typeRef = new TypeReference<AssetType>() {};
             return apiClient.getObjectMapper().readValue(response, typeRef);
-    
+
         } catch (IOException e) {
-            throw xeroExceptionHandler.convertException(e);
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage());
+        } catch (XeroApiException e) {
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage(), e.getResponseCode(),JSONUtils.isJSONValid(e.getMessage()));
         }
     }
   /**
@@ -249,85 +276,93 @@ public class AssetApi {
     * @return Asset
     * @throws IOException if an error occurs while attempting to invoke the API
     **/
-    public Asset getAssetById(UUID id, Map<String, String> params) throws IOException {
-        
+    public Asset getAssetById(UUID id) throws IOException {
         try {
+            String strBody = null;
+            Map<String, String> params = null;
+            String correctPath = "/Assets/{id}";
+            // Hacky path manipulation to support different return types from same endpoint
+            String path = "/Assets/{id}";
+            String type = "/pdf";
+            if(path.toLowerCase().contains(type.toLowerCase()))
+            {
+                correctPath = path.replace("/pdf","");
+            } 
+
             // create a map of path variables
             final Map<String, String> uriVariables = new HashMap<String, String>();
             uriVariables.put("id", id.toString());
-            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + "/Assets/{id}");
+            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + correctPath);
             String url = uriBuilder.buildFromMap(uriVariables).toString();
 
-            String body = null;
-            Date modifiedAfter = null;
-
-            ApiClient apiClient = new ApiClient();
-            String response = this.GET(url, body, params, modifiedAfter);
-
+            
+            String response = this.DATA(url, strBody, params, "GET");
             TypeReference<Asset> typeRef = new TypeReference<Asset>() {};
             return apiClient.getObjectMapper().readValue(response, typeRef);
-    
+
         } catch (IOException e) {
-            throw xeroExceptionHandler.convertException(e);
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage());
+        } catch (XeroApiException e) {
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage(), e.getResponseCode(),JSONUtils.isJSONValid(e.getMessage()));
         }
     }
   /**
     * searches fixed asset settings
-    * By passing in the appropriate options, you can search for available fixed asset types in the system 
+    * By passing in the appropriate options, you can search for available fixed asset types in the system
     * <p><b>200</b> - search results matching criteria
     * <p><b>400</b> - bad input parameter
     * @return Setting
     * @throws IOException if an error occurs while attempting to invoke the API
     **/
-    public Setting getAssetSettings(Map<String, String> params) throws IOException {
-        
+    public Setting getAssetSettings() throws IOException {
         try {
-            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + "/Settings");
+            String strBody = null;
+            Map<String, String> params = null;
+            String correctPath = "/Settings";
+            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + correctPath);
             String url = uriBuilder.build().toString();
 
-            String body = null;
-            Date modifiedAfter = null;
-
-            ApiClient apiClient = new ApiClient();
-            String response = this.GET(url, body, params, modifiedAfter);
-
+            
+            String response = this.DATA(url, strBody, params, "GET");
             TypeReference<Setting> typeRef = new TypeReference<Setting>() {};
             return apiClient.getObjectMapper().readValue(response, typeRef);
-    
+
         } catch (IOException e) {
-            throw xeroExceptionHandler.convertException(e);
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage());
+        } catch (XeroApiException e) {
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage(), e.getResponseCode(),JSONUtils.isJSONValid(e.getMessage()));
         }
     }
   /**
     * searches fixed asset types
-    * By passing in the appropriate options, you can search for available fixed asset types in the system 
+    * By passing in the appropriate options, you can search for available fixed asset types in the system
     * <p><b>200</b> - search results matching criteria
     * <p><b>400</b> - bad input parameter
     * @return List&lt;AssetType&gt;
     * @throws IOException if an error occurs while attempting to invoke the API
     **/
-    public List<AssetType> getAssetTypes(Map<String, String> params) throws IOException {
-        
+    public List<AssetType> getAssetTypes() throws IOException {
         try {
-            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + "/AssetTypes");
+            String strBody = null;
+            Map<String, String> params = null;
+            String correctPath = "/AssetTypes";
+            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + correctPath);
             String url = uriBuilder.build().toString();
 
-            String body = null;
-            Date modifiedAfter = null;
-
-            ApiClient apiClient = new ApiClient();
-            String response = this.GET(url, body, params, modifiedAfter);
-
+            
+            String response = this.DATA(url, strBody, params, "GET");
             TypeReference<List<AssetType>> typeRef = new TypeReference<List<AssetType>>() {};
             return apiClient.getObjectMapper().readValue(response, typeRef);
-    
+
         } catch (IOException e) {
-            throw xeroExceptionHandler.convertException(e);
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage());
+        } catch (XeroApiException e) {
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage(), e.getResponseCode(),JSONUtils.isJSONValid(e.getMessage()));
         }
     }
   /**
     * searches fixed asset
-    * By passing in the appropriate options, you can search for available fixed asset in the system 
+    * By passing in the appropriate options, you can search for available fixed asset in the system
     * <p><b>200</b> - search results matching criteria
     * <p><b>400</b> - bad input parameter
     * @param status Required when retrieving a collection of assets. See Asset Status Codes
@@ -339,23 +374,44 @@ public class AssetApi {
     * @return Assets
     * @throws IOException if an error occurs while attempting to invoke the API
     **/
-    public Assets getAssets(Map<String, String> params) throws IOException {
-        
+    public Assets getAssets(String status, Integer page, Integer pageSize, String orderBy, String sortDirection, String filterBy) throws IOException {
         try {
-            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + "/Assets");
+            String strBody = null;
+            Map<String, String> params = null;
+            String correctPath = "/Assets";
+            UriBuilder uriBuilder = UriBuilder.fromUri(apiClient.getBasePath() + correctPath);
             String url = uriBuilder.build().toString();
-
-            String body = null;
-            Date modifiedAfter = null;
-
-            ApiClient apiClient = new ApiClient();
-            String response = this.GET(url, body, params, modifiedAfter);
-
+            params = new HashMap<>();
+            if (status != null) {
+                addToMapIfNotNull(params, "status", status);
+            }if (page != null) {
+                addToMapIfNotNull(params, "page", page);
+            }if (pageSize != null) {
+                addToMapIfNotNull(params, "pageSize", pageSize);
+            }if (orderBy != null) {
+                addToMapIfNotNull(params, "orderBy", orderBy);
+            }if (sortDirection != null) {
+                addToMapIfNotNull(params, "sortDirection", sortDirection);
+            }if (filterBy != null) {
+                addToMapIfNotNull(params, "filterBy", filterBy);
+            }
+            
+            String response = this.DATA(url, strBody, params, "GET");
             TypeReference<Assets> typeRef = new TypeReference<Assets>() {};
             return apiClient.getObjectMapper().readValue(response, typeRef);
-    
+
         } catch (IOException e) {
-            throw xeroExceptionHandler.convertException(e);
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage());
+        } catch (XeroApiException e) {
+            throw xeroExceptionHandler.handleBadRequest(e.getMessage(), e.getResponseCode(),JSONUtils.isJSONValid(e.getMessage()));
         }
     }
+
+    protected void addToMapIfNotNull(Map<String, String> map, String key, Object value) {
+        if (value != null) {
+            map.put(key, value.toString());
+        }
+    }
+
 }
+
